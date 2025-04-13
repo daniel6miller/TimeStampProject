@@ -22,11 +22,34 @@
       <p>
         <code>{"unix":1451001600000, "utc":"Fri, 25 Dec 2015 00:00:00 GMT"}</code>
       </p>
+      <h2>Live Test Results:</h2>
+      <p>
+        <pre id="result1">Loading /api/2015-12-25...</pre>
+        <pre id="result2">Loading /api/1451001600000...</pre>
+      </p>
     </div>
     <div class="footer">
       <p>
         By <a href="https://www.freecodecamp.org/">freeCodeCamp.org</a>
       </p>
     </div>
+    <script>
+      async function testBackend(url, containerId) {
+        try {
+          const res = await fetch(url);
+          const data = await res.json();
+          document.getElementById(containerId).textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+          document.getElementById(containerId).textContent = 'Error: ' + err.message;
+        }
+      }
+    
+      // Run tests when the page loads
+      window.onload = function () {
+        testBackend("/api/2015-12-25", "result1");
+        testBackend("/api/1451001600000", "result2");
+      };
+    </script>
+    
   </body>
 </html>
