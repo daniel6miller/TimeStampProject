@@ -1,61 +1,98 @@
-//index.js
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const dns = require('dns');
-const urlParser = require('url');
+const { v4: uuidv4 } = require('uuid');
+
 const app = express();
-
-// Basic Configuration
-const port = process.env.PORT || 3000;
-
 app.use(cors());
-app.use('/public', express.static(`${process.cwd()}/public`));
+app.use(express.static('public'));
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
-app.get('/', function (req, res) {
-  res.sendFile(process.cwd() + '/views/index.html');
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/views/index.html');
 });
 
-app.get('/api/hello', function (req, res) {
-  res.json({ greeting: 'hello API' });
+// In-memory "database"
+let users = [];
+
+// POST /api/users => create new user
+app.post('/api/users', (req, res) => {
+  const { username } = req.body;
+  const newUser = {
+    username,
+    _id: uuidv4(),
+    log: []
+  };
+  users.push(newUser);
+  res.json({ username: newUser.username, _id: newUser._id });
 });
 
-// In-memory URL database
-let urlDatabase = [];
-let id = 1;
+// GET /api/users => return all users
+app.get('/api/users', (req, res) => {
+  const list = users.map(u => ({ username: u.username, _id: u._id }));
+  res.json(list);
+});
 
-// POST to shorten URL
-app.post('/api/shorturl', function (req, res) {
-  const originalUrl = req.body.url;
-  const parsedUrl = urlParser.parse(originalUrl);
+// POST /api/users/:_id/exercises => add an exercise
+app.post('/api/users/:_id/exercises', (req, res) => {
+  const { _id } = req.params;
+  const { description, duration, date } = req.body;
+  const user = users.find(u => u._id === _id);
+  if (!user) return res.json({ error: 'User not found' });
 
-  // Check valid hostname via DNS
-  dns.lookup(parsedUrl.hostname, (err, address) => {
-    if (err || !address) {
-      return res.json({ error: 'invalid url' });
-    }
+  const exercise = {
+    description,
+    duration: parseInt(duration),
+    date: date ? new Date(date).toDateString() : new Date().toDateString()
+  };
 
-    // Save URL and respond with short version
-    urlDatabase.push({ original_url: originalUrl, short_url: id });
-    res.json({ original_url: originalUrl, short_url: id });
-    id++;
+  user.log.push(exercise);
+
+  res.json({
+    _id: user._id,
+    username: user.username,
+    date: exercise.date,
+    duration: exercise.duration,
+    description: exercise.description
   });
 });
 
-// GET to redirect short URL
-app.get('/api/shorturl/:short_url', function (req, res) {
-  const shortUrl = parseInt(req.params.short_url);
-  const entry = urlDatabase.find(u => u.short_url === shortUrl);
+// GET /api/users/:_id/logs => return exercise logs (optional from, to, limit)
+app.get('/api/users/:_id/logs', (req, res) => {
+  const { _id } = req.params;
+  const { from, to, limit } = req.query;
+  const user = users.find(u => u._id === _id);
+  if (!user) return res.json({ error: 'User not found' });
 
-  if (entry) {
-    res.redirect(entry.original_url);
-  } else {
-    res.json({ error: 'No short URL found for given input' });
+  let log = user.log;
+
+  // Filter by date range
+  if (from) {
+    const fromDate = new Date(from);
+    log = log.filter(e => new Date(e.date) >= fromDate);
   }
+
+  if (to) {
+    const toDate = new Date(to);
+    log = log.filter(e => new Date(e.date) <= toDate);
+  }
+
+  // Limit log results
+  if (limit) {
+    log = log.slice(0, parseInt(limit));
+  }
+
+  res.json({
+    _id: user._id,
+    username: user.username,
+    count: log.length,
+    log: log
+  });
 });
 
-app.listen(port, function () {
-  console.log(`Listening on port ${port}`);
+// Start server
+const listener = app.listen(process.env.PORT || 3000, () => {
+  console.log('Your app is listening on port ' + listener.address().port);
 });
 
